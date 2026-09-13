@@ -10,6 +10,13 @@ class GameMain : G2AppBase
 	private const float BarWidth = 778.0f;
 	private const float ClearStart = 500.0f;
 	private const float ClearWidth = 156.0f;
+	private const float FirstBoriDuration = 0.58f;
+	private const float BoriPauseDuration = 0.14f;
+	private const float SecondBoriDuration = 0.58f;
+	private const float SuccessDuration = 0.65f;
+	private const float InitialMarkerSpeed = 250.0f;
+	private const float MarkerSpeedIncrease = 28.0f;
+	private const float MaximumMarkerSpeed = 760.0f;
 
 	private GameState _state = GameState.Title;
 	private int _stage = 1;
@@ -39,49 +46,86 @@ class GameMain : G2AppBase
 		ClearColor = new Color4(0.07f, 0.04f, 0.02f, 1.0f);
 		_bestStage = LoadBestStage();
 
+		LoadTitleResources();
+		LoadGameplayResources();
+		LoadGameOverResources();
+
+		_numberFont = CreateFont(30);
+		_smallNumberFont = CreateFont(22);
+	}
+
+	private void LoadTitleResources()
+	{
 		_titleBackground = new G2Texture("resource/gametitle/title_bg.png");
 		_titleLogo = new G2Texture("resource/gametitle/title_boribori.png");
 		_titleStartButton = new G2Texture("resource/gametitle/title_game_start.png");
 		_titleExitButton = new G2Texture("resource/gametitle/title_game_exit.png");
 		_titleBestScore = new G2Texture("resource/gametitle/title_best_score_blank.png");
+	}
 
+	private void LoadGameplayResources()
+	{
 		_gameplayScene = new G2Texture("resource/gameplay/gameplay_scene.png");
 		_gameplayChant = new G2Texture("resource/gameplay/gameplay_boribori.png");
 		_stageBoard = new G2Texture("resource/gameplay/gameplay_stage.png");
 		_timingMarker = new G2Texture("resource/gameplay/gameplay_timing-_marker.png");
+	}
 
+	private void LoadGameOverResources()
+	{
 		_gameOverScene = new G2Texture("resource/gameover/gameover_scene.png");
-		_numberFont = CreateFont(30);
-		_smallNumberFont = CreateFont(22);
 	}
 
 	protected override void Update()
 	{
 		_stateTime += DeltaTime;
-		if (Input.IsKeyDown(Keys.Escape)) { Close(); return; }
+		if (Input.IsKeyDown(Keys.Escape))
+		{
+			Close();
+			return;
+		}
 
 		switch (_state)
 		{
 			case GameState.Title:
-				if (Input.IsKeyDown(Keys.Space)) StartGame();
+				if (Input.IsKeyDown(Keys.Space))
+				{
+					StartGame();
+				}
 				break;
 			case GameState.FirstBori:
-				if (_stateTime >= 0.58) ChangeState(GameState.BoriPause);
+				if (_stateTime >= FirstBoriDuration)
+				{
+					ChangeState(GameState.BoriPause);
+				}
 				break;
 			case GameState.BoriPause:
-				if (_stateTime >= 0.14) ChangeState(GameState.SecondBori);
+				if (_stateTime >= BoriPauseDuration)
+				{
+					ChangeState(GameState.SecondBori);
+				}
 				break;
 			case GameState.SecondBori:
-				if (_stateTime >= 0.58) BeginTiming();
+				if (_stateTime >= SecondBoriDuration)
+				{
+					BeginTiming();
+				}
 				break;
 			case GameState.Timing:
 				UpdateTiming();
 				break;
 			case GameState.Success:
-				if (_stateTime >= 0.65) { _stage++; ChangeState(GameState.FirstBori); }
+				if (_stateTime >= SuccessDuration)
+				{
+					_stage++;
+					ChangeState(GameState.FirstBori);
+				}
 				break;
 			case GameState.GameOver:
-				if (Input.IsKeyDown(Keys.Space) || Input.IsKeyDown(Keys.Enter)) StartGame();
+				if (Input.IsKeyDown(Keys.Space) || Input.IsKeyDown(Keys.Enter))
+				{
+					StartGame();
+				}
 				break;
 		}
 	}
@@ -101,7 +145,20 @@ class GameMain : G2AppBase
 
 	private void UpdateTiming()
 	{
-		float speed = Math.Min(760.0f, 250.0f + (_stage - 1) * 28.0f);
+		MoveTimingMarker();
+
+		if (Input.IsKeyDown(Keys.Space))
+		{
+			JudgeTiming();
+		}
+	}
+
+	private void MoveTimingMarker()
+	{
+		float speed = Math.Min(
+			MaximumMarkerSpeed,
+			InitialMarkerSpeed + (_stage - 1) * MarkerSpeedIncrease);
+
 		_markerPosition += _markerDirection * speed * (float)DeltaTime;
 		if (_markerPosition >= BarLeft + BarWidth)
 		{
@@ -113,9 +170,10 @@ class GameMain : G2AppBase
 			_markerPosition = BarLeft;
 			_markerDirection = 1.0f;
 		}
+	}
 
-		if (!Input.IsKeyDown(Keys.Space)) return;
-
+	private void JudgeTiming()
+	{
 		bool cleared = _markerPosition >= ClearStart && _markerPosition <= ClearStart + ClearWidth;
 		if (!cleared)
 		{
@@ -141,22 +199,30 @@ class GameMain : G2AppBase
 	{
 		if (_state == GameState.Title)
 		{
-			_titleBackground?.Draw(new Rect(0, 0, 960, 640), new Rect(0, 0, 1536, 1024));
+			DrawFullScreen(_titleBackground);
 			RenderTitle();
 			return;
 		}
 
 		if (_state == GameState.GameOver)
 		{
-			_gameOverScene?.Draw(new Rect(0, 0, 960, 640), new Rect(0, 0, 1536, 1024));
+			DrawFullScreen(_gameOverScene);
 			RenderGameOverScores();
 			return;
 		}
 
-		_gameplayScene?.Draw(new Rect(0, 0, 960, 640), new Rect(0, 0, 1536, 1024));
+		DrawFullScreen(_gameplayScene);
 		RenderStage();
 		RenderChant();
-		if (_state is GameState.Timing or GameState.Success) RenderTimingMarker();
+		if (_state is GameState.Timing or GameState.Success)
+		{
+			RenderTimingMarker();
+		}
+	}
+
+	private static void DrawFullScreen(G2Texture? texture)
+	{
+		texture?.Draw(new Rect(0, 0, 960, 640), new Rect(0, 0, 1536, 1024));
 	}
 
 	private void RenderTitle()
@@ -176,7 +242,16 @@ class GameMain : G2AppBase
 
 	private void RenderChant()
 	{
-		if (_state is not (GameState.FirstBori or GameState.BoriPause or GameState.SecondBori or GameState.Timing)) return;
+		bool showChant = _state is
+			GameState.FirstBori or
+			GameState.BoriPause or
+			GameState.SecondBori or
+			GameState.Timing;
+
+		if (!showChant)
+		{
+			return;
+		}
 
 		float pulse = 1.0f + 0.025f * MathF.Sin((float)_stateTime * 9.0f);
 		float width = 324.0f * pulse;
@@ -204,8 +279,20 @@ class GameMain : G2AppBase
 
 	private static int LoadBestStage()
 	{
-		try { return File.Exists(BestStagePath) && int.TryParse(File.ReadAllText(BestStagePath), out int value) ? value : 0; }
-		catch { return 0; }
+		try
+		{
+			if (!File.Exists(BestStagePath))
+			{
+				return 0;
+			}
+
+			string savedValue = File.ReadAllText(BestStagePath);
+			return int.TryParse(savedValue, out int bestStage) ? bestStage : 0;
+		}
+		catch
+		{
+			return 0;
+		}
 	}
 
 	private void SaveBestStage()
