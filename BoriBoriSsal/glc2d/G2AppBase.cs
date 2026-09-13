@@ -25,11 +25,18 @@ abstract class G2AppBase : IDisposable
 	public double DeltaTime { get; private set; }
 	public double TotalTime { get; private set; }
 
-	public float ScaleX => (float)_mainForm.ClientSize.Width / ScreenSize.Width;
-	public float ScaleY => (float)_mainForm.ClientSize.Height / ScreenSize.Height;
+	public float RenderScale => Math.Min(
+		(float)_mainForm.ClientSize.Width / ScreenSize.Width,
+		(float)_mainForm.ClientSize.Height / ScreenSize.Height);
+	public float ScaleX => RenderScale;
+	public float ScaleY => RenderScale;
+	public float ViewOffsetX => (_mainForm.ClientSize.Width - ScreenSize.Width * RenderScale) * 0.5f;
+	public float ViewOffsetY => (_mainForm.ClientSize.Height - ScreenSize.Height * RenderScale) * 0.5f;
 
 	public static float ScreenScaleX => Instance?.ScaleX ?? throw new InvalidOperationException("ScreenScaleX::G2AppBase instance is not initialized.");
 	public static float ScreenScaleY => Instance?.ScaleY ?? throw new InvalidOperationException("ScreenScaleY::G2AppBase instance is not initialized.");
+	public static float ScreenOffsetX => Instance?.ViewOffsetX ?? throw new InvalidOperationException("ScreenOffsetX::G2AppBase instance is not initialized.");
+	public static float ScreenOffsetY => Instance?.ViewOffsetY ?? throw new InvalidOperationException("ScreenOffsetY::G2AppBase instance is not initialized.");
 	//-----------------------------------------------------------------------------------------------------------------------------------------
 	private readonly RenderForm _mainForm;
 	private readonly G2D2DContext _graphics;
@@ -138,7 +145,9 @@ abstract class G2AppBase : IDisposable
 	private void Render2D()
 	{
 		ID2D1HwndRenderTarget renderTarget = _graphics.RenderTarget;
-		renderTarget.Transform = System.Numerics.Matrix3x2.CreateScale(ScreenScaleX, ScreenScaleY);
+		renderTarget.Transform =
+			System.Numerics.Matrix3x2.CreateScale(RenderScale) *
+			System.Numerics.Matrix3x2.CreateTranslation(ViewOffsetX, ViewOffsetY);
 		renderTarget.BeginDraw();
 		renderTarget.Clear(ClearColor);
 

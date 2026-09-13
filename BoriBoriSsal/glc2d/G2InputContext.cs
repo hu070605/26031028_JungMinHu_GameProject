@@ -122,7 +122,9 @@ class G2InputContext : IDisposable
 		var scaleX = G2AppBase.ScreenScaleX;
 		var scaleY = G2AppBase.ScreenScaleY;
 
-		_mousePosition = new PointF(point.X / scaleX, point.Y / scaleY);
+		_mousePosition = new PointF(
+			(point.X - G2AppBase.ScreenOffsetX) / scaleX,
+			(point.Y - G2AppBase.ScreenOffsetY) / scaleY);
 		_mouseDelta = new PointF(_mousePosition.X - _mouseOldPosition.X, _mousePosition.Y - _mouseOldPosition.Y);
 		_mouseOldPosition = _mousePosition;
 	}

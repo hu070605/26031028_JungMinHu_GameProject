@@ -30,6 +30,9 @@ class G2D2DContext : IDisposable
 				PixelSize = new SizeI(width, height)
 			}
 		);
+		// WinForms의 ClientSize는 픽셀 단위이므로 Direct2D도 96 DPI로 맞춘다.
+		// 그렇지 않으면 Windows 디스플레이 배율이 125% 이상일 때 화면이 이중 확대된다.
+		RenderTarget.SetDpi(96.0f, 96.0f);
 		Instance = this;
 	}
 

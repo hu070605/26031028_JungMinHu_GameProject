@@ -1,18 +1,15 @@
-using System.Numerics;
 using System.Windows.Forms;
-using Vortice.Direct2D1;
 using Vortice.DirectWrite;
 using Vortice.Mathematics;
 
 class GameMain : G2AppBase
 {
-	private enum GameState { Title, FirstBori, BoriPause, SecondBori, Timing, Success, Caught, GameOver }
+	private enum GameState { Title, FirstBori, BoriPause, SecondBori, Timing, Success, GameOver }
 
-	private const float BarLeft = 150.0f;
-	private const float BarTop = 540.0f;
-	private const float BarWidth = 660.0f;
-	private const float BarHeight = 34.0f;
-	private const float ClearWidth = 120.0f;
+	private const float BarLeft = 91.0f;
+	private const float BarWidth = 778.0f;
+	private const float ClearStart = 500.0f;
+	private const float ClearWidth = 156.0f;
 
 	private GameState _state = GameState.Title;
 	private int _stage = 1;
@@ -20,44 +17,42 @@ class GameMain : G2AppBase
 	private double _stateTime;
 	private float _markerPosition;
 	private float _markerDirection = 1.0f;
-	private float _clearStart;
-	private readonly Random _random = new();
 
-	private G2Texture? _background;
-	private G2Font? _titleFont;
-	private G2Font? _chantFont;
-	private G2Font? _headingFont;
-	private G2Font? _bodyFont;
-	private ID2D1SolidColorBrush? _darkBrush;
-	private ID2D1SolidColorBrush? _panelBrush;
-	private ID2D1SolidColorBrush? _creamBrush;
-	private ID2D1SolidColorBrush? _goldBrush;
-	private ID2D1SolidColorBrush? _greenBrush;
-	private ID2D1SolidColorBrush? _redBrush;
-	private ID2D1SolidColorBrush? _skinBrush;
-	private ID2D1SolidColorBrush? _skinShadeBrush;
+	private G2Texture? _titleBackground;
+	private G2Texture? _titleLogo;
+	private G2Texture? _titleStartButton;
+	private G2Texture? _titleExitButton;
+	private G2Texture? _titleBestScore;
+	private G2Texture? _gameplayScene;
+	private G2Texture? _gameplayChant;
+	private G2Texture? _stageBoard;
+	private G2Texture? _timingMarker;
+	private G2Texture? _gameOverScene;
+	private G2Font? _numberFont;
+	private G2Font? _smallNumberFont;
 
 	public override System.Drawing.Size ScreenSize => GameGlobal.ScreenSize;
 	public override string GameName => GameGlobal.GameName;
 
 	protected override void Initialize()
 	{
-		ClearColor = new Color4(0.85f, 0.94f, 1.0f, 1.0f);
+		ClearColor = new Color4(0.07f, 0.04f, 0.02f, 1.0f);
 		_bestStage = LoadBestStage();
-		_background = new G2Texture("resource/boribori-background.png");
-		_titleFont = CreateFont(74);
-		_chantFont = CreateFont(66);
-		_headingFont = CreateFont(30);
-		_bodyFont = CreateFont(22);
 
-		_darkBrush = RenderTarget.CreateSolidColorBrush(new Color4(0.15f, 0.13f, 0.10f, 1.0f));
-		_panelBrush = RenderTarget.CreateSolidColorBrush(new Color4(0.08f, 0.08f, 0.06f, 0.78f));
-		_creamBrush = RenderTarget.CreateSolidColorBrush(new Color4(1.0f, 0.96f, 0.79f, 1.0f));
-		_goldBrush = RenderTarget.CreateSolidColorBrush(new Color4(1.0f, 0.70f, 0.12f, 1.0f));
-		_greenBrush = RenderTarget.CreateSolidColorBrush(new Color4(0.18f, 0.76f, 0.35f, 1.0f));
-		_redBrush = RenderTarget.CreateSolidColorBrush(new Color4(0.93f, 0.24f, 0.20f, 1.0f));
-		_skinBrush = RenderTarget.CreateSolidColorBrush(new Color4(1.0f, 0.72f, 0.50f, 1.0f));
-		_skinShadeBrush = RenderTarget.CreateSolidColorBrush(new Color4(0.72f, 0.38f, 0.23f, 1.0f));
+		_titleBackground = new G2Texture("resource/gametitle/title_bg.png");
+		_titleLogo = new G2Texture("resource/gametitle/title_boribori.png");
+		_titleStartButton = new G2Texture("resource/gametitle/title_game_start.png");
+		_titleExitButton = new G2Texture("resource/gametitle/title_game_exit.png");
+		_titleBestScore = new G2Texture("resource/gametitle/title_best_score_blank.png");
+
+		_gameplayScene = new G2Texture("resource/gameplay/gameplay_scene.png");
+		_gameplayChant = new G2Texture("resource/gameplay/gameplay_boribori.png");
+		_stageBoard = new G2Texture("resource/gameplay/gameplay_stage.png");
+		_timingMarker = new G2Texture("resource/gameplay/gameplay_timing-_marker.png");
+
+		_gameOverScene = new G2Texture("resource/gameover/gameover_scene.png");
+		_numberFont = CreateFont(30);
+		_smallNumberFont = CreateFont(22);
 	}
 
 	protected override void Update()
@@ -83,22 +78,22 @@ class GameMain : G2AppBase
 				UpdateTiming();
 				break;
 			case GameState.Success:
-				if (_stateTime >= 1.55) { _stage++; ChangeState(GameState.FirstBori); }
-				break;
-			case GameState.Caught:
-				if (_stateTime >= 1.35) ChangeState(GameState.GameOver);
+				if (_stateTime >= 0.65) { _stage++; ChangeState(GameState.FirstBori); }
 				break;
 			case GameState.GameOver:
-				if (Input.IsKeyDown(Keys.Space)) StartGame();
+				if (Input.IsKeyDown(Keys.Space) || Input.IsKeyDown(Keys.Enter)) StartGame();
 				break;
 		}
 	}
 
-	private void StartGame() { _stage = 1; ChangeState(GameState.FirstBori); }
+	private void StartGame()
+	{
+		_stage = 1;
+		ChangeState(GameState.FirstBori);
+	}
 
 	private void BeginTiming()
 	{
-		_clearStart = BarLeft + 45.0f + (float)_random.NextDouble() * (BarWidth - ClearWidth - 90.0f);
 		_markerPosition = BarLeft;
 		_markerDirection = 1.0f;
 		ChangeState(GameState.Timing);
@@ -108,137 +103,98 @@ class GameMain : G2AppBase
 	{
 		float speed = Math.Min(760.0f, 250.0f + (_stage - 1) * 28.0f);
 		_markerPosition += _markerDirection * speed * (float)DeltaTime;
-		if (_markerPosition >= BarLeft + BarWidth) { _markerPosition = BarLeft + BarWidth; _markerDirection = -1.0f; }
-		else if (_markerPosition <= BarLeft) { _markerPosition = BarLeft; _markerDirection = 1.0f; }
-
-		if (Input.IsKeyDown(Keys.Space))
+		if (_markerPosition >= BarLeft + BarWidth)
 		{
-			bool cleared = _markerPosition >= _clearStart && _markerPosition <= _clearStart + ClearWidth;
-			if (cleared)
-			{
-				if (_stage > _bestStage) { _bestStage = _stage; SaveBestStage(); }
-				ChangeState(GameState.Success);
-			}
-			else ChangeState(GameState.Caught);
+			_markerPosition = BarLeft + BarWidth;
+			_markerDirection = -1.0f;
 		}
+		else if (_markerPosition <= BarLeft)
+		{
+			_markerPosition = BarLeft;
+			_markerDirection = 1.0f;
+		}
+
+		if (!Input.IsKeyDown(Keys.Space)) return;
+
+		bool cleared = _markerPosition >= ClearStart && _markerPosition <= ClearStart + ClearWidth;
+		if (!cleared)
+		{
+			ChangeState(GameState.GameOver);
+			return;
+		}
+
+		if (_stage > _bestStage)
+		{
+			_bestStage = _stage;
+			SaveBestStage();
+		}
+		ChangeState(GameState.Success);
 	}
 
-	private void ChangeState(GameState state) { _state = state; _stateTime = 0.0; }
+	private void ChangeState(GameState state)
+	{
+		_state = state;
+		_stateTime = 0.0;
+	}
 
 	protected override void Render()
 	{
-		_background?.Draw(new Rect(0, 0, 960, 640), new Rect(0, 0, 1536, 1024));
-		RenderTopBar();
-		if (_state == GameState.Title) { RenderTitle(); return; }
-		if (_state == GameState.GameOver) { RenderHands(1.0f, 1.0f); RenderGameOver(); return; }
-
-		float fistProgress = _state == GameState.Success ? GetPunchProgress() : 0.0f;
-		float caughtAmount = 0.0f;
-		if (_state == GameState.Caught)
+		if (_state == GameState.Title)
 		{
-			fistProgress = Math.Min(1.0f, (float)_stateTime * 2.8f);
-			caughtAmount = Math.Min(1.0f, (float)_stateTime * 3.5f);
+			_titleBackground?.Draw(new Rect(0, 0, 960, 640), new Rect(0, 0, 1536, 1024));
+			RenderTitle();
+			return;
 		}
-		RenderHands(caughtAmount, fistProgress);
-		RenderChant();
-		if (_state is GameState.Timing or GameState.Success or GameState.Caught) RenderTimingBar();
-	}
 
-	private void RenderTopBar()
-	{
-		RenderTarget.FillRectangle(new Rect(0, 0, 960, 76), _panelBrush!);
-		_headingFont?.DrawText($"STAGE {_stage}", new Rect(28, 17, 250, 45), new Color4(1.0f, 0.94f, 0.66f, 1.0f));
-		_headingFont?.DrawText($"BEST {_bestStage}", new Rect(680, 17, 250, 45), new Color4(1.0f, 0.94f, 0.66f, 1.0f));
+		if (_state == GameState.GameOver)
+		{
+			_gameOverScene?.Draw(new Rect(0, 0, 960, 640), new Rect(0, 0, 1536, 1024));
+			RenderGameOverScores();
+			return;
+		}
+
+		_gameplayScene?.Draw(new Rect(0, 0, 960, 640), new Rect(0, 0, 1536, 1024));
+		RenderStage();
+		RenderChant();
+		if (_state is GameState.Timing or GameState.Success) RenderTimingMarker();
 	}
 
 	private void RenderTitle()
 	{
-		RenderTarget.FillRectangle(new Rect(110, 120, 740, 405), _panelBrush!);
-		_titleFont?.DrawText("보리보리쌀", new Rect(130, 150, 700, 100), new Color4(1.0f, 0.76f, 0.18f, 1.0f));
-		_headingFont?.DrawText("타이밍을 맞춰 주먹을 재빨리 빼세요!", new Rect(155, 278, 650, 55), new Color4(1, 1, 1, 1));
-		RenderTarget.FillRectangle(new Rect(275, 370, 410, 78), _goldBrush!);
-		_headingFont?.DrawText("SPACE  게임 시작", new Rect(295, 385, 370, 50), new Color4(0.15f, 0.12f, 0.06f, 1.0f));
-		_bodyFont?.DrawText("ESC 종료  ·  ALT+ENTER 전체화면", new Rect(250, 475, 460, 38), new Color4(0.92f, 0.92f, 0.92f, 1.0f));
+		_titleLogo?.Draw(new Rect(165, 75, 630, 217), new Rect(0, 0, 2137, 736));
+		_titleStartButton?.Draw(new Rect(330, 340, 300, 104), new Rect(0, 0, 2126, 740));
+		_titleExitButton?.Draw(new Rect(370, 455, 220, 58), new Rect(0, 0, 1845, 490));
+		_titleBestScore?.Draw(new Rect(350, 540, 260, 90), new Rect(0, 0, 2129, 739));
+		_smallNumberFont?.DrawText(_bestStage.ToString(), new Rect(474, 560, 36, 40), new Color4(1.0f, 0.72f, 0.06f, 1.0f));
+	}
+
+	private void RenderStage()
+	{
+		_stageBoard?.Draw(new Rect(350, 16, 260, 59), new Rect(0, 0, 1811, 409));
+		_numberFont?.DrawText(_stage.ToString(), new Rect(511, 25, 48, 38), new Color4(1.0f, 0.93f, 0.72f, 1.0f));
 	}
 
 	private void RenderChant()
 	{
-		string text = _state switch
-		{
-			GameState.FirstBori or GameState.SecondBori => "보리!",
-			GameState.Timing => "지금이다!",
-			GameState.Success => "쌀!",
-			GameState.Caught => "쌀..!",
-			_ => string.Empty
-		};
-		Color4 color = _state == GameState.Caught ? new Color4(0.95f, 0.25f, 0.20f, 1.0f) : new Color4(1.0f, 0.67f, 0.08f, 1.0f);
-		_chantFont?.DrawText(text, new Rect(250, 90, 460, 90), color);
-		if (_state == GameState.Success) _headingFont?.DrawText("CLEAR!", new Rect(330, 450, 300, 48), new Color4(0.12f, 0.72f, 0.28f, 1.0f));
-		else if (_state == GameState.Caught) _headingFont?.DrawText("잡혔다!", new Rect(330, 450, 300, 48), new Color4(0.92f, 0.18f, 0.15f, 1.0f));
+		if (_state is not (GameState.FirstBori or GameState.BoriPause or GameState.SecondBori or GameState.Timing)) return;
+
+		float pulse = 1.0f + 0.025f * MathF.Sin((float)_stateTime * 9.0f);
+		float width = 324.0f * pulse;
+		float height = 127.0f * pulse;
+		_gameplayChant?.Draw(
+			new Rect(480.0f - width * 0.5f, 164.0f - height * 0.5f, width, height),
+			new Rect(0, 0, 1673, 654));
 	}
 
-	private void RenderHands(float caughtAmount, float fistProgress)
+	private void RenderTimingMarker()
 	{
-		float leftX = 182.0f + caughtAmount * 80.0f;
-		float rightX = 658.0f - caughtAmount * 80.0f;
-		DrawAiHand(leftX, 230, false);
-		DrawAiHand(rightX, 230, true);
-		DrawPlayerFist(480, 415.0f - fistProgress * 145.0f, _state == GameState.Caught);
+		_timingMarker?.Draw(new Rect(_markerPosition - 9, 506, 18, 84), new Rect(0, 0, 276, 1286));
 	}
 
-	private void DrawAiHand(float x, float y, bool mirrored)
+	private void RenderGameOverScores()
 	{
-		float palmX = mirrored ? x : x + 45;
-		RenderTarget.FillRectangle(new Rect(palmX, y + 18, 92, 120), _skinShadeBrush!);
-		RenderTarget.FillRectangle(new Rect(palmX + (mirrored ? -8 : 8), y + 10, 92, 120), _skinBrush!);
-		for (int i = 0; i < 4; i++)
-		{
-			float fingerY = y + i * 25;
-			float fingerX = mirrored ? palmX - 74 : palmX + 82;
-			RenderTarget.FillRoundedRectangle(new RoundedRectangle(new System.Drawing.RectangleF(fingerX, fingerY, 82, 20), 10, 10), _skinBrush!);
-		}
-		float thumbX = mirrored ? palmX - 42 : palmX + 75;
-		RenderTarget.FillRoundedRectangle(new RoundedRectangle(new System.Drawing.RectangleF(thumbX, y + 96, 58, 24), 12, 12), _skinBrush!);
-		RenderTarget.DrawRectangle(new Rect(palmX + (mirrored ? -8 : 8), y + 10, 92, 120), _skinShadeBrush!, 3.0f);
-	}
-
-	private void DrawPlayerFist(float centerX, float y, bool caught)
-	{
-		float width = caught ? 112.0f : 100.0f;
-		RenderTarget.FillRoundedRectangle(new RoundedRectangle(new System.Drawing.RectangleF(centerX - width / 2, y, width, 92), 25, 25), _skinShadeBrush!);
-		RenderTarget.FillRoundedRectangle(new RoundedRectangle(new System.Drawing.RectangleF(centerX - width / 2, y - 7, width, 88), 25, 25), _skinBrush!);
-		for (int i = 0; i < 4; i++)
-		{
-			float knuckleX = centerX - width / 2 + 8 + i * 23;
-			RenderTarget.FillEllipse(new Ellipse(new Vector2(knuckleX + 12, y - 3), 14, 14), _skinBrush!);
-		}
-		RenderTarget.DrawLine(new Vector2(centerX - 34, y + 47), new Vector2(centerX + 34, y + 47), _skinShadeBrush!, 3.0f);
-		RenderTarget.FillRectangle(new Rect(centerX - 31, y + 80, 62, 82), _skinBrush!);
-	}
-
-	private void RenderTimingBar()
-	{
-		RenderTarget.FillRectangle(new Rect(125, 510, 710, 100), _panelBrush!);
-		RenderTarget.FillRectangle(new Rect(BarLeft, BarTop, BarWidth, BarHeight), _creamBrush!);
-		RenderTarget.FillRectangle(new Rect(_clearStart, BarTop, ClearWidth, BarHeight), _greenBrush!);
-		RenderTarget.DrawRectangle(new Rect(BarLeft, BarTop, BarWidth, BarHeight), _darkBrush!, 4.0f);
-		RenderTarget.FillRectangle(new Rect(_markerPosition - 5, BarTop - 14, 10, BarHeight + 28), _state == GameState.Caught ? _redBrush! : _goldBrush!);
-		_bodyFont?.DrawText("SPACE로 멈추기", new Rect(365, 578, 230, 28), new Color4(1, 1, 1, 1));
-	}
-
-	private void RenderGameOver()
-	{
-		RenderTarget.FillRectangle(new Rect(150, 125, 660, 390), _panelBrush!);
-		_titleFont?.DrawText("게임 오버", new Rect(190, 155, 580, 95), new Color4(0.95f, 0.24f, 0.20f, 1.0f));
-		_headingFont?.DrawText($"도달 스테이지  {_stage}", new Rect(290, 285, 380, 50), new Color4(1, 1, 1, 1));
-		_headingFont?.DrawText($"최고 기록  {_bestStage}", new Rect(290, 340, 380, 50), new Color4(1.0f, 0.82f, 0.20f, 1.0f));
-		_bodyFont?.DrawText("SPACE  다시 도전", new Rect(335, 430, 290, 38), new Color4(1, 1, 1, 1));
-	}
-
-	private float GetPunchProgress()
-	{
-		float t = Math.Clamp((float)_stateTime / 1.25f, 0.0f, 1.0f);
-		return MathF.Sin(t * MathF.PI);
+		_numberFont?.DrawText(_stage.ToString(), new Rect(548, 170, 80, 45), new Color4(0.25f, 0.11f, 0.02f, 1.0f));
+		_numberFont?.DrawText(_bestStage.ToString(), new Rect(548, 229, 80, 45), new Color4(0.25f, 0.11f, 0.02f, 1.0f));
 	}
 
 	private static string BestStagePath => Path.Combine(
@@ -262,13 +218,24 @@ class GameMain : G2AppBase
 		catch { /* 기록 저장 실패는 플레이를 중단시키지 않는다. */ }
 	}
 
-	private static G2Font CreateFont(float size) => new("Malgun Gothic", size, FontWeight.Bold, Vortice.DirectWrite.FontStyle.Normal, TextAlignment.Center, ParagraphAlignment.Center);
+	private static G2Font CreateFont(float size) => new(
+		"Malgun Gothic", size, FontWeight.Bold, Vortice.DirectWrite.FontStyle.Normal,
+		TextAlignment.Center, ParagraphAlignment.Center);
 
 	public override void Dispose()
 	{
-		_skinShadeBrush?.Dispose(); _skinBrush?.Dispose(); _redBrush?.Dispose(); _greenBrush?.Dispose();
-		_goldBrush?.Dispose(); _creamBrush?.Dispose(); _panelBrush?.Dispose(); _darkBrush?.Dispose();
-		_bodyFont?.Dispose(); _headingFont?.Dispose(); _chantFont?.Dispose(); _titleFont?.Dispose(); _background?.Dispose();
+		_smallNumberFont?.Dispose();
+		_numberFont?.Dispose();
+		_gameOverScene?.Dispose();
+		_timingMarker?.Dispose();
+		_stageBoard?.Dispose();
+		_gameplayChant?.Dispose();
+		_gameplayScene?.Dispose();
+		_titleBestScore?.Dispose();
+		_titleExitButton?.Dispose();
+		_titleStartButton?.Dispose();
+		_titleLogo?.Dispose();
+		_titleBackground?.Dispose();
 		base.Dispose();
 	}
 }
