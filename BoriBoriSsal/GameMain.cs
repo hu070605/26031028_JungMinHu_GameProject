@@ -5,18 +5,23 @@ using Vortice.Mathematics;
 class GameMain : G2AppBase
 {
 	private enum GameState { Title, FirstBori, BoriPause, SecondBori, Timing, Success, GameOver }
+	private enum ButtonAction { None, Start, Exit, Retry, ReturnToTitle, ResetBestStage }
 
 	private const float BarLeft = 91.0f;
 	private const float BarWidth = 778.0f;
-	private const float ClearStart = 500.0f;
+	private const float OriginalClearZoneLeft = 500.0f;
 	private const float ClearWidth = 156.0f;
+	private const float ClearZoneTop = 507.0f;
+	private const float ClearZoneHeight = 56.0f;
+	private const float ClearZoneBlankSampleLeft = 250.0f;
+	private const float ClearZoneEdgeMargin = 20.0f;
 	private const float FirstBoriDuration = 0.58f;
 	private const float BoriPauseDuration = 0.14f;
 	private const float SecondBoriDuration = 0.58f;
 	private const float SuccessDuration = 0.65f;
 	private const float InitialMarkerSpeed = 250.0f;
-	private const float MarkerSpeedIncrease = 28.0f;
-	private const float MaximumMarkerSpeed = 760.0f;
+	private const float MarkerSpeedIncrease = 55.0f;
+	private const float MaximumMarkerSpeed = 900.0f;
 	private const float StartButtonLeft = 330.0f;
 	private const float StartButtonTop = 340.0f;
 	private const float StartButtonWidth = 300.0f;
@@ -29,6 +34,17 @@ class GameMain : G2AppBase
 	private const float RetryButtonTop = 285.0f;
 	private const float RetryButtonWidth = 270.0f;
 	private const float RetryButtonHeight = 70.0f;
+	private const float ReturnTitleButtonLeft = 720.0f;
+	private const float ReturnTitleButtonTop = 547.0f;
+	private const float ReturnTitleButtonWidth = 220.0f;
+	private const float ReturnTitleButtonHeight = 73.0f;
+	private const float ResetButtonLeft = 770.0f;
+	private const float ResetButtonTop = 563.0f;
+	private const float ResetButtonWidth = 170.0f;
+	private const float ResetButtonHeight = 57.0f;
+	private const float ButtonAnimationDuration = 0.18f;
+	private const float ButtonMaximumScale = 1.10f;
+	private const float ScreenTextureScale = 1.6f;
 
 	private GameState _state = GameState.Title;
 	private int _stage = 1;
@@ -36,21 +52,29 @@ class GameMain : G2AppBase
 	private double _stateTime;
 	private float _markerPosition;
 	private float _markerDirection = 1.0f;
+	private float _clearZoneLeft = OriginalClearZoneLeft;
+	private ButtonAction _animatingButton;
+	private double _buttonAnimationTime;
 
 	private G2Texture? _titleBackground;
 	private G2Texture? _titleLogo;
 	private G2Texture? _titleStartButton;
 	private G2Texture? _titleExitButton;
 	private G2Texture? _titleBestScore;
+	private G2Texture? _titleResetButton;
 	private G2Texture? _gameplayScene;
 	private G2Texture? _gameplayChant;
 	private G2Texture? _stageBoard;
 	private G2Texture? _timingMarker;
 	private G2Texture? _gameOverScene;
+	private G2Texture? _gameOverReturnTitleButton;
 	private G2Font? _numberFont;
 	private G2Font? _smallNumberFont;
 	private G2AudioMp3? _stageClearSound;
 	private G2AudioMp3? _gameOverSound;
+	private G2AudioMp3? _buttonClickSound;
+	private G2AudioMp3? _titleBgm;
+	private G2AudioMp3? _gameplayBgm;
 
 	public override System.Drawing.Size ScreenSize => GameGlobal.ScreenSize;
 	public override string GameName => GameGlobal.GameName;
@@ -68,6 +92,10 @@ class GameMain : G2AppBase
 		_smallNumberFont = CreateFont(22);
 		_stageClearSound = new G2AudioMp3("resource/sound/stage_clear.mp3");
 		_gameOverSound = new G2AudioMp3("resource/sound/game_over.mp3");
+		_buttonClickSound = new G2AudioMp3("resource/sound/button_click.mp3");
+		_titleBgm = new G2AudioMp3("resource/sound/title_bgm.mp3");
+		_gameplayBgm = new G2AudioMp3("resource/sound/gameplay_bgm.mp3");
+		_titleBgm.Play(true);
 	}
 
 	private void LoadTitleResources()
@@ -77,6 +105,7 @@ class GameMain : G2AppBase
 		_titleStartButton = new G2Texture("resource/gametitle/title_game_start.png");
 		_titleExitButton = new G2Texture("resource/gametitle/title_game_exit.png");
 		_titleBestScore = new G2Texture("resource/gametitle/title_best_score_blank.png");
+		_titleResetButton = new G2Texture("resource/gametitle/title_reset.png");
 	}
 
 	private void LoadGameplayResources()
@@ -90,6 +119,7 @@ class GameMain : G2AppBase
 	private void LoadGameOverResources()
 	{
 		_gameOverScene = new G2Texture("resource/gameover/gameover_scene.png");
+		_gameOverReturnTitleButton = new G2Texture("resource/gameover/gameover_return_title.png");
 	}
 
 	protected override void Update()
@@ -101,18 +131,36 @@ class GameMain : G2AppBase
 			return;
 		}
 
+		if (_animatingButton != ButtonAction.None)
+		{
+			UpdateButtonAnimation();
+			return;
+		}
+
 		switch (_state)
 		{
 			case GameState.Title:
 				if (Input.IsKeyDown(Keys.Space) || IsLeftButtonClickedInside(
 					StartButtonLeft, StartButtonTop, StartButtonWidth, StartButtonHeight))
 				{
-					StartGame();
+					if (Input.IsKeyDown(Keys.Space))
+					{
+						StartGame();
+					}
+					else
+					{
+						BeginButtonAnimation(ButtonAction.Start);
+					}
 				}
 				else if (IsLeftButtonClickedInside(
 					ExitButtonLeft, ExitButtonTop, ExitButtonWidth, ExitButtonHeight))
 				{
-					Close();
+					BeginButtonAnimation(ButtonAction.Exit);
+				}
+				else if (IsLeftButtonClickedInside(
+					ResetButtonLeft, ResetButtonTop, ResetButtonWidth, ResetButtonHeight))
+				{
+					BeginButtonAnimation(ButtonAction.ResetBestStage);
 				}
 				break;
 			case GameState.FirstBori:
@@ -140,6 +188,7 @@ class GameMain : G2AppBase
 				if (_stateTime >= SuccessDuration)
 				{
 					_stage++;
+					RandomizeClearZone();
 					ChangeState(GameState.FirstBori);
 				}
 				break;
@@ -149,10 +198,72 @@ class GameMain : G2AppBase
 					IsLeftButtonClickedInside(
 						RetryButtonLeft, RetryButtonTop, RetryButtonWidth, RetryButtonHeight))
 				{
-					StartGame();
+					if (Input.IsKeyDown(Keys.Space) || Input.IsKeyDown(Keys.Enter))
+					{
+						StartGame();
+					}
+					else
+					{
+						BeginButtonAnimation(ButtonAction.Retry);
+					}
+				}
+				else if (IsLeftButtonClickedInside(
+					ReturnTitleButtonLeft, ReturnTitleButtonTop,
+					ReturnTitleButtonWidth, ReturnTitleButtonHeight))
+				{
+					BeginButtonAnimation(ButtonAction.ReturnToTitle);
 				}
 				break;
 		}
+	}
+
+	private void BeginButtonAnimation(ButtonAction button)
+	{
+		_buttonClickSound?.Play(false);
+		_animatingButton = button;
+		_buttonAnimationTime = 0.0;
+	}
+
+	private void UpdateButtonAnimation()
+	{
+		_buttonAnimationTime += DeltaTime;
+		if (_buttonAnimationTime < ButtonAnimationDuration)
+		{
+			return;
+		}
+
+		ButtonAction completedButton = _animatingButton;
+		_animatingButton = ButtonAction.None;
+		_buttonAnimationTime = 0.0;
+
+		switch (completedButton)
+		{
+			case ButtonAction.Start:
+			case ButtonAction.Retry:
+				StartGame();
+				break;
+			case ButtonAction.Exit:
+				Close();
+				break;
+			case ButtonAction.ReturnToTitle:
+				ReturnToTitle();
+				break;
+			case ButtonAction.ResetBestStage:
+				ResetBestStage();
+				break;
+		}
+	}
+
+	private float GetButtonScale(ButtonAction button)
+	{
+		if (_animatingButton != button)
+		{
+			return 1.0f;
+		}
+
+		float progress = Math.Clamp(
+			(float)(_buttonAnimationTime / ButtonAnimationDuration), 0.0f, 1.0f);
+		return 1.0f + (ButtonMaximumScale - 1.0f) * MathF.Sin(progress * MathF.PI);
 	}
 
 	private bool IsLeftButtonClickedInside(float left, float top, float width, float height)
@@ -171,9 +282,26 @@ class GameMain : G2AppBase
 
 	private void StartGame()
 	{
+		_titleBgm?.Stop();
+		_gameplayBgm?.Play(true);
 		_gameOverSound?.Stop();
 		_stage = 1;
+		RandomizeClearZone();
 		ChangeState(GameState.FirstBori);
+	}
+
+	private void ReturnToTitle()
+	{
+		_gameplayBgm?.Stop();
+		_gameOverSound?.Stop();
+		_titleBgm?.Play(true);
+		ChangeState(GameState.Title);
+	}
+
+	private void ResetBestStage()
+	{
+		_bestStage = 0;
+		SaveBestStage();
 	}
 
 	private void BeginTiming()
@@ -181,6 +309,24 @@ class GameMain : G2AppBase
 		_markerPosition = BarLeft;
 		_markerDirection = 1.0f;
 		ChangeState(GameState.Timing);
+	}
+
+	private void RandomizeClearZone()
+	{
+		float minimumLeft = BarLeft + ClearZoneEdgeMargin;
+		float maximumLeft = BarLeft + BarWidth - ClearWidth - ClearZoneEdgeMargin;
+		float previousLeft = _clearZoneLeft;
+
+		for (int attempt = 0; attempt < 8; attempt++)
+		{
+			float candidate = minimumLeft +
+				Random.Shared.NextSingle() * (maximumLeft - minimumLeft);
+			if (MathF.Abs(candidate - previousLeft) >= ClearWidth * 0.5f || attempt == 7)
+			{
+				_clearZoneLeft = candidate;
+				return;
+			}
+		}
 	}
 
 	private void UpdateTiming()
@@ -214,9 +360,11 @@ class GameMain : G2AppBase
 
 	private void JudgeTiming()
 	{
-		bool cleared = _markerPosition >= ClearStart && _markerPosition <= ClearStart + ClearWidth;
+		bool cleared = _markerPosition >= _clearZoneLeft &&
+			_markerPosition <= _clearZoneLeft + ClearWidth;
 		if (!cleared)
 		{
+			_gameplayBgm?.Stop();
 			_stageClearSound?.Stop();
 			_gameOverSound?.Play(false);
 			ChangeState(GameState.GameOver);
@@ -250,11 +398,14 @@ class GameMain : G2AppBase
 		if (_state == GameState.GameOver)
 		{
 			DrawFullScreen(_gameOverScene);
+			RenderRetryButtonEffect();
+			RenderReturnTitleButton();
 			RenderGameOverScores();
 			return;
 		}
 
 		DrawFullScreen(_gameplayScene);
+		RenderClearZone();
 		RenderStage();
 		RenderChant();
 		if (_state is GameState.Timing or GameState.Success)
@@ -271,20 +422,92 @@ class GameMain : G2AppBase
 	private void RenderTitle()
 	{
 		_titleLogo?.Draw(new Rect(165, 75, 630, 217), new Rect(0, 0, 2137, 736));
-		_titleStartButton?.Draw(
+		DrawScaledButton(
+			_titleStartButton,
 			new Rect(StartButtonLeft, StartButtonTop, StartButtonWidth, StartButtonHeight),
-			new Rect(0, 0, 2126, 740));
-		_titleExitButton?.Draw(
+			new Rect(0, 0, 2126, 740),
+			GetButtonScale(ButtonAction.Start));
+		DrawScaledButton(
+			_titleExitButton,
 			new Rect(ExitButtonLeft, ExitButtonTop, ExitButtonWidth, ExitButtonHeight),
-			new Rect(0, 0, 1845, 490));
+			new Rect(0, 0, 1845, 490),
+			GetButtonScale(ButtonAction.Exit));
 		_titleBestScore?.Draw(new Rect(350, 540, 260, 90), new Rect(0, 0, 2129, 739));
 		_smallNumberFont?.DrawText(_bestStage.ToString(), new Rect(474, 560, 36, 40), new Color4(1.0f, 0.72f, 0.06f, 1.0f));
+		DrawScaledButton(
+			_titleResetButton,
+			new Rect(ResetButtonLeft, ResetButtonTop, ResetButtonWidth, ResetButtonHeight),
+			new Rect(0, 0, 2172, 724),
+			GetButtonScale(ButtonAction.ResetBestStage));
+	}
+
+	private static void DrawScaledButton(G2Texture? texture, Rect destination, Rect source, float scale)
+	{
+		float scaledWidth = destination.Width * scale;
+		float scaledHeight = destination.Height * scale;
+		texture?.Draw(
+			new Rect(
+				destination.X + (destination.Width - scaledWidth) * 0.5f,
+				destination.Y + (destination.Height - scaledHeight) * 0.5f,
+				scaledWidth,
+				scaledHeight),
+			source);
+	}
+
+	private void RenderRetryButtonEffect()
+	{
+		if (_animatingButton != ButtonAction.Retry)
+		{
+			return;
+		}
+
+		DrawScaledButton(
+			_gameOverScene,
+			new Rect(RetryButtonLeft, RetryButtonTop, RetryButtonWidth, RetryButtonHeight),
+			new Rect(
+				RetryButtonLeft * ScreenTextureScale,
+				RetryButtonTop * ScreenTextureScale,
+				RetryButtonWidth * ScreenTextureScale,
+				RetryButtonHeight * ScreenTextureScale),
+			GetButtonScale(ButtonAction.Retry));
+	}
+
+	private void RenderReturnTitleButton()
+	{
+		DrawScaledButton(
+			_gameOverReturnTitleButton,
+			new Rect(
+				ReturnTitleButtonLeft, ReturnTitleButtonTop,
+				ReturnTitleButtonWidth, ReturnTitleButtonHeight),
+			new Rect(0, 0, 2172, 724),
+			GetButtonScale(ButtonAction.ReturnToTitle));
 	}
 
 	private void RenderStage()
 	{
 		_stageBoard?.Draw(new Rect(350, 16, 260, 59), new Rect(0, 0, 1811, 409));
 		_numberFont?.DrawText(_stage.ToString(), new Rect(511, 25, 48, 38), new Color4(1.0f, 0.93f, 0.72f, 1.0f));
+	}
+
+	private void RenderClearZone()
+	{
+		// 배경 이미지에 고정된 초록 구간을 타이밍 바의 빈 부분으로 덮는다.
+		_gameplayScene?.Draw(
+			new Rect(OriginalClearZoneLeft, ClearZoneTop, ClearWidth, ClearZoneHeight),
+			new Rect(
+				ClearZoneBlankSampleLeft * ScreenTextureScale,
+				ClearZoneTop * ScreenTextureScale,
+				ClearWidth * ScreenTextureScale,
+				ClearZoneHeight * ScreenTextureScale));
+
+		// 원본 초록 구간을 이번 스테이지의 무작위 위치에 다시 그린다.
+		_gameplayScene?.Draw(
+			new Rect(_clearZoneLeft, ClearZoneTop, ClearWidth, ClearZoneHeight),
+			new Rect(
+				OriginalClearZoneLeft * ScreenTextureScale,
+				ClearZoneTop * ScreenTextureScale,
+				ClearWidth * ScreenTextureScale,
+				ClearZoneHeight * ScreenTextureScale));
 	}
 
 	private void RenderChant()
@@ -358,16 +581,21 @@ class GameMain : G2AppBase
 
 	public override void Dispose()
 	{
+		_gameplayBgm?.Dispose();
+		_titleBgm?.Dispose();
+		_buttonClickSound?.Dispose();
 		_gameOverSound?.Dispose();
 		_stageClearSound?.Dispose();
 		_smallNumberFont?.Dispose();
 		_numberFont?.Dispose();
+		_gameOverReturnTitleButton?.Dispose();
 		_gameOverScene?.Dispose();
 		_timingMarker?.Dispose();
 		_stageBoard?.Dispose();
 		_gameplayChant?.Dispose();
 		_gameplayScene?.Dispose();
 		_titleBestScore?.Dispose();
+		_titleResetButton?.Dispose();
 		_titleExitButton?.Dispose();
 		_titleStartButton?.Dispose();
 		_titleLogo?.Dispose();
