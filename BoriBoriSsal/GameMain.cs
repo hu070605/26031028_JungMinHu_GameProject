@@ -21,7 +21,9 @@ class GameMain : G2AppBase
 	private const float SuccessDuration = 0.65f;
 	private const float InitialMarkerSpeed = 250.0f;
 	private const float MarkerSpeedIncrease = 55.0f;
-	private const float MaximumMarkerSpeed = 900.0f;
+	private const float SpeedTransitionPoint = 900.0f;
+	private const int SpeedTransitionStage = 13;
+	private const float PostTransitionSpeedIncrease = 20.0f;
 	private const float StartButtonLeft = 330.0f;
 	private const float StartButtonTop = 340.0f;
 	private const float StartButtonWidth = 300.0f;
@@ -64,6 +66,7 @@ class GameMain : G2AppBase
 	private G2Texture? _titleResetButton;
 	private G2Texture? _gameplayScene;
 	private G2Texture? _gameplayChant;
+	private G2Texture? _gameplaySuccessCallout;
 	private G2Texture? _stageBoard;
 	private G2Texture? _timingMarker;
 	private G2Texture? _gameOverScene;
@@ -112,6 +115,7 @@ class GameMain : G2AppBase
 	{
 		_gameplayScene = new G2Texture("resource/gameplay/gameplay_scene.png");
 		_gameplayChant = new G2Texture("resource/gameplay/gameplay_boribori.png");
+		_gameplaySuccessCallout = new G2Texture("resource/gameplay/gameplay_ssal.png");
 		_stageBoard = new G2Texture("resource/gameplay/gameplay_stage.png");
 		_timingMarker = new G2Texture("resource/gameplay/gameplay_timing-_marker.png");
 	}
@@ -193,12 +197,11 @@ class GameMain : G2AppBase
 				}
 				break;
 			case GameState.GameOver:
-				if (Input.IsKeyDown(Keys.Space) ||
-					Input.IsKeyDown(Keys.Enter) ||
+				if (IsRetryKeyPressed() ||
 					IsLeftButtonClickedInside(
 						RetryButtonLeft, RetryButtonTop, RetryButtonWidth, RetryButtonHeight))
 				{
-					if (Input.IsKeyDown(Keys.Space) || Input.IsKeyDown(Keys.Enter))
+					if (IsRetryKeyPressed())
 					{
 						StartGame();
 					}
@@ -215,6 +218,20 @@ class GameMain : G2AppBase
 				}
 				break;
 		}
+	}
+
+	private bool IsRetryKeyPressed()
+	{
+		if (Input.IsKeyDown(Keys.Space))
+		{
+			return true;
+		}
+
+		G2InputContext.InputState altState = Input.KeyState(Keys.Menu);
+		bool isAltPressed = altState is
+			G2InputContext.InputState.Down or
+			G2InputContext.InputState.Press;
+		return Input.IsKeyDown(Keys.Enter) && !isAltPressed;
 	}
 
 	private void BeginButtonAnimation(ButtonAction button)
@@ -315,18 +332,17 @@ class GameMain : G2AppBase
 	{
 		float minimumLeft = BarLeft + ClearZoneEdgeMargin;
 		float maximumLeft = BarLeft + BarWidth - ClearWidth - ClearZoneEdgeMargin;
-		float previousLeft = _clearZoneLeft;
+		float minimumDistance = ClearWidth * 0.5f;
+		float leftRangeEnd = Math.Clamp(_clearZoneLeft - minimumDistance, minimumLeft, maximumLeft);
+		float rightRangeStart = Math.Clamp(_clearZoneLeft + minimumDistance, minimumLeft, maximumLeft);
+		float leftRangeWidth = leftRangeEnd - minimumLeft;
+		float rightRangeWidth = maximumLeft - rightRangeStart;
 
-		for (int attempt = 0; attempt < 8; attempt++)
-		{
-			float candidate = minimumLeft +
-				Random.Shared.NextSingle() * (maximumLeft - minimumLeft);
-			if (MathF.Abs(candidate - previousLeft) >= ClearWidth * 0.5f || attempt == 7)
-			{
-				_clearZoneLeft = candidate;
-				return;
-			}
-		}
+		// 이전 위치 주변을 제외한 두 구간에서 길이에 비례해 무작위로 선택한다.
+		float offset = Random.Shared.NextSingle() * (leftRangeWidth + rightRangeWidth);
+		_clearZoneLeft = offset < leftRangeWidth
+			? minimumLeft + offset
+			: rightRangeStart + offset - leftRangeWidth;
 	}
 
 	private void UpdateTiming()
@@ -341,19 +357,28 @@ class GameMain : G2AppBase
 
 	private void MoveTimingMarker()
 	{
-		float speed = Math.Min(
-			MaximumMarkerSpeed,
-			InitialMarkerSpeed + (_stage - 1) * MarkerSpeedIncrease);
+		float speed = _stage <= SpeedTransitionStage
+			? Math.Min(
+				SpeedTransitionPoint,
+				InitialMarkerSpeed + (_stage - 1) * MarkerSpeedIncrease)
+			: SpeedTransitionPoint +
+				(_stage - SpeedTransitionStage) * PostTransitionSpeedIncrease;
 
-		_markerPosition += _markerDirection * speed * (float)DeltaTime;
-		if (_markerPosition >= BarLeft + BarWidth)
+		// 왕복 이동을 한 주기로 계산해 여러 번 튕기는 프레임에도 이동 거리를 보존한다.
+		double relativePosition = _markerPosition - BarLeft;
+		double period = BarWidth * 2.0;
+		double phase = _markerDirection > 0.0f
+			? relativePosition
+			: period - relativePosition;
+		phase = (phase + speed * DeltaTime) % period;
+		if (phase >= BarWidth)
 		{
-			_markerPosition = BarLeft + BarWidth;
+			_markerPosition = BarLeft + (float)(period - phase);
 			_markerDirection = -1.0f;
 		}
-		else if (_markerPosition <= BarLeft)
+		else
 		{
-			_markerPosition = BarLeft;
+			_markerPosition = BarLeft + (float)phase;
 			_markerDirection = 1.0f;
 		}
 	}
@@ -512,6 +537,12 @@ class GameMain : G2AppBase
 
 	private void RenderChant()
 	{
+		if (_state == GameState.Success)
+		{
+			RenderSuccessCallout();
+			return;
+		}
+
 		bool showChant = _state is
 			GameState.FirstBori or
 			GameState.BoriPause or
@@ -531,9 +562,20 @@ class GameMain : G2AppBase
 			new Rect(0, 0, 1673, 654));
 	}
 
+	private void RenderSuccessCallout()
+	{
+		float popPhase = Math.Min(1.0f, (float)(_stateTime / 0.22));
+		float scale = 1.0f + 0.12f * MathF.Sin(popPhase * MathF.PI);
+		float width = 285.0f * scale;
+		float height = 124.0f * scale;
+		_gameplaySuccessCallout?.Draw(
+			new Rect(480.0f - width * 0.5f, 164.0f - height * 0.5f, width, height),
+			new Rect(0, 0, 1900, 828));
+	}
+
 	private void RenderTimingMarker()
 	{
-		_timingMarker?.Draw(new Rect(_markerPosition - 9, 506, 18, 84), new Rect(0, 0, 276, 1286));
+		_timingMarker?.Draw(new Rect(_markerPosition - 9, 509, 18, 52), new Rect(0, 0, 276, 1286));
 	}
 
 	private void RenderGameOverScores()
@@ -592,6 +634,7 @@ class GameMain : G2AppBase
 		_gameOverScene?.Dispose();
 		_timingMarker?.Dispose();
 		_stageBoard?.Dispose();
+		_gameplaySuccessCallout?.Dispose();
 		_gameplayChant?.Dispose();
 		_gameplayScene?.Dispose();
 		_titleBestScore?.Dispose();
